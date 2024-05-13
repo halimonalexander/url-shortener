@@ -2,7 +2,8 @@ package sqlite
 
 import (
 	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
+	"link_shortener/internal/storage"
 	"link_shortener/lib/e"
 )
 
@@ -30,7 +31,7 @@ func initDb(db *sql.DB) error {
 		alias TEXT NOT NULL UNIQUE,
 		url TEXT NOT NULL	    
 	);
-	CREATE INDEX IS NOT EXISTS idx_alias ON url(alias);
+	CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
 	`)
 	if err != nil {
 		return err
@@ -38,6 +39,52 @@ func initDb(db *sql.DB) error {
 
 	if _, err := stmt.Exec(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s Storage) SaveUrl(incomingUrl string, alias string) (int64, error) {
+	stmt, err := s.db.Prepare("INSERT INTO url (url, alias) VALUES (?, ?)")
+	if err != nil {
+		return 0, e.Wrap("storage.sqlite.SaveUrl", err)
+	}
+
+	res, err := stmt.Exec(incomingUrl, alias)
+	if err != nil {
+		if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return 0, e.Wrap("storage.sqlite.SaveUrl", storage.ErrURLExists)
+		}
+
+		return 0, e.Wrap("storage.sqlite.SaveUrl", err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, e.Wrap("unable to fetch id", storage.ErrUnableToFetchRecordId)
+	}
+
+	return id, nil
+}
+
+func (s Storage) GetUrl(alias string) (string, error) {
+	var requestedUrl string
+
+	if err := s.db.QueryRow("SELECT url FROM url WHERE alias = ? LIMIT 1", alias).Scan(&requestedUrl); err != nil {
+		return "", e.Wrap("storage.sqlite.GetUrl", e.IfIsChangeTo(err, sql.ErrNoRows, storage.ErrURLNotFound))
+	}
+
+	return requestedUrl, nil
+}
+
+func (s Storage) RemoveUrl(alias string) error {
+	stmt, err := s.db.Prepare("DELETE FROM url WHERE alias = ?")
+	if err != nil {
+		return e.Wrap("storage.sqlite.RemoveUrl", err)
+	}
+
+	if _, err := stmt.Exec(alias); err != nil {
+		return e.Wrap("storage.sqlite.RemoveUrl", err)
 	}
 
 	return nil

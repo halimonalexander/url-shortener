@@ -13,8 +13,20 @@ func main() {
 	log := initLogger(cfg)
 
 	storage := initStorage(cfg, log)
-	_ = storage
 	log.Info("Loading storage is complete")
+
+	//id, err := storage.SaveUrl("test", "debug")
+	//if err != nil {
+	//	log.Error(err.Error())
+	//	os.Exit(1)
+	//}
+	//log.Info("Created " + strconv.FormatInt(id, 10))
+	//err = storage.RemoveUrl("debug")
+	//if err != nil {
+	//	log.Error(err.Error())
+	//	os.Exit(1)
+	//}
+	_ = storage
 
 	initRouter()
 
